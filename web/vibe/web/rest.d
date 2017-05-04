@@ -910,7 +910,7 @@ unittest {
 		long getHeaderCount(size_t foo = 0);
 	}
 
-	size_t handler(HTTPServerRequest req, HTTPServerResponse res)
+	static size_t handler(HTTPServerRequest req, HTTPServerResponse res)
 	{
 		return req.headers.length;
 	}
@@ -951,7 +951,7 @@ unittest {
 		long getMagic();
 	}
 
-	long handler(long ret, HTTPServerRequest req, HTTPServerResponse res)
+	static long handler(long ret, HTTPServerRequest req, HTTPServerResponse res)
 	{
 		return ret * 2;
 	}
@@ -1009,11 +1009,13 @@ private HTTPServerRequestDelegate jsonMethodHandler(alias Func, size_t ridx, T)(
 	import vibe.utils.string : sanitizeUTF8;
 	import vibe.web.internal.rest.common : ParameterKind;
 	import vibe.internal.meta.funcattr : IsAttributedParameter, computeAttributedParameterCtx;
+	import vibe.internal.meta.traits : derivedMethod;
 	import vibe.textfilter.urlencode : urlDecode;
 
 	enum Method = __traits(identifier, Func);
 	alias PTypes = ParameterTypeTuple!Func;
 	alias PDefaults = ParameterDefaultValueTuple!Func;
+	alias CFunc = derivedMethod!(T, Func);
 	alias RT = ReturnType!(FunctionTypeOf!Func);
 	static const sroute = RestInterface!T.staticRoutes[ridx];
 	auto route = intf.routes[ridx];
@@ -1063,9 +1065,9 @@ private HTTPServerRequestDelegate jsonMethodHandler(alias Func, size_t ridx, T)(
 				if (auto pv = fieldname in req.headers)
 					v = fromRestString!PT(*pv);
 			} else static if (sparam.kind == ParameterKind.attributed) {
-				static if (!__traits(compiles, () @safe { computeAttributedParameterCtx!(Func, pname)(inst, req, res); } ()))
+				static if (!__traits(compiles, () @safe { computeAttributedParameterCtx!(CFunc, pname)(inst, req, res); } ()))
 					pragma(msg, "Non-@safe @before evaluators are deprecated - annotate evaluator function for parameter "~pname~" of "~T.stringof~"."~Method~" as @safe.");
-				v = () @trusted { return computeAttributedParameterCtx!(Func, pname)(inst, req, res); } ();
+				v = () @trusted { return computeAttributedParameterCtx!(CFunc, pname)(inst, req, res); } ();
 			} else static if (sparam.kind == ParameterKind.internal) {
 				if (auto pv = fieldname in req.params)
 					v = fromRestString!PT(urlDecode(*pv));
@@ -1132,7 +1134,7 @@ private HTTPServerRequestDelegate jsonMethodHandler(alias Func, size_t ridx, T)(
 				static if (!__traits(compiles, () @safe { evaluateOutputModifiers!Func(ret, req, res); } ()))
 					pragma(msg, "Non-@safe @after evaluators are deprecated - annotate @after evaluator function for "~T.stringof~"."~Method~" as @safe.");
 
-				ret = () @trusted { return evaluateOutputModifiers!Func(ret, req, res); } ();
+				ret = () @trusted { return evaluateOutputModifiers!CFunc(ret, req, res); } ();
 				returnHeaders();
 				debug res.writePrettyJsonBody(ret);
 				else res.writeJsonBody(ret);
